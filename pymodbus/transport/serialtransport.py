@@ -5,7 +5,7 @@ import asyncio
 import contextlib
 import os
 import sys
-
+import subprocess
 
 with contextlib.suppress(ImportError):
     import serial
@@ -34,7 +34,7 @@ class SerialTransport(asyncio.Transport):
         self._poll_wait_time = 0.0005
         self.sync_serial.timeout = 0
         self.sync_serial.write_timeout = 0
-
+        
     def setup(self) -> None:
         """Prepare to read/write."""
         if self.force_poll:
@@ -134,11 +134,13 @@ class SerialTransport(asyncio.Transport):
                 self.intern_protocol.data_received(data)  # type: ignore[attr-defined]
         except serial.SerialException as exc:
             self.close(exc=exc)
-
+    def gpio_write(pin, value):
+        subprocess.run(["gpio", "write", str(pin), str(value)])
     def intern_write_ready(self) -> None:
         """Asynchronously write buffered data."""
         data = b"".join(self.intern_write_buffer)
         try:
+            gpio_write(6, 1)
             if (nlen := self.sync_serial.write(data)) and nlen < len(data):
                 self.intern_write_buffer = [data[nlen:]]
                 if not self.poll_task:
@@ -146,6 +148,7 @@ class SerialTransport(asyncio.Transport):
                         self.sync_serial.fileno(), self.intern_write_ready
                     )
                 return
+            gpio_write(6, 0)
             self.flush()
         except (BlockingIOError, InterruptedError):
             return
